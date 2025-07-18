@@ -1,0 +1,9 @@
+{
+    "name": "Quiet",
+    "age": 18,
+    "adult": true,
+    "languages": [
+        "Russian",
+        "English"
+    ]
+}
