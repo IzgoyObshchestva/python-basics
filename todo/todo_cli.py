@@ -1,13 +1,39 @@
 import json
 from datetime import datetime
-from collections import deque
+# from collections import deque
 import os
 import platform
 
 class Task:
-    def __init__(self):
-        self._start_task = True
-        self._q = TodoManager()
+    def __init__(self, id, title, status="peding", created_at=None):
+        self.id = id
+        self.title = title
+        self.status = status
+        self.created_at = created_at or datetime.now().isoformat()
+
+    def toggle_status(self):
+        self.status = "done" if self.status == "pending" else "pending"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "status": self.status,
+            "created_at": self.created_at,
+        }
+
+    @staticmethod
+    def from_dict(data):
+        return Task(
+            id=data["id"],
+            title=data["title"],
+            status=data.get("status", "pending"),
+            created_at=data.get("created_at")
+        )
+
+class TodoCLI:
+    def __init__(self, manager):
+        self.manager = manager
 
     @staticmethod
     def _clear_consol():
@@ -17,123 +43,118 @@ class Task:
         else:
             os.system("clear")
 
-    def start(self):
-        while self._start_task:
+    def run(self):
+        while True:
             self._clear_consol()
-            value = self._function_selection()
-            match value:
+            self._show_menu()
+            choice = input("Введите номер действия: ")
+            match choice:
                 case "1":
-                    self._show_task()
+                    self._clear_consol()
+                    self.manager.show_tasks()
                 case "2":
-                    self._add_task()
+                    self._clear_consol()
+                    title = input("Введите название задачи: ")
+                    res = self.manager.add_task(title)
+                    print(res)
                 case "3":
-                    self._delete_task()
+                    self._clear_consol()
+                    try:
+                        task_id = int(input("Введите ID задачи для удаления: "))
+                        res = self.manager.delete_task(task_id)
+                        print(res)
+                    except ValueError:
+                        print("Неверный ID.")
                 case "4":
-                    self._mark_done_task()
+                    self._clear_consol()
+                    try:
+                        task_id = int(input("Введите ID задачи для смены статуса: "))
+                        res = self.manager.mark_done(task_id)
+                        print(res)
+                    except ValueError:
+                        print("Неверный ID.")
                 case "5":
                     self._clear_consol()
-                    self._q.save_to_file()
                     print("Программа успешно завершина")
                     break
                 case _:
                     self._clear_consol()
-                    print(f'Не верный выбор')
+                    print(f'Неверный выбор')
             input('Нажмите Enter чтобы продолжить...')
 
-    def _show_task(self):
-        self._clear_consol()
-        self._q.show_tasks()
-
-    def _add_task(self):
-        self._clear_consol()
-        valus = input("Введите название задачи: ")
-        self._q.add_task(valus)
-
-    def _delete_task(self):
-        self._clear_consol()
-        valus = input("Для удаления введите нормер задачи: ")
-        self._q.delete_task(valus)
-
-    def _mark_done_task(self):
-        self._clear_consol()
-        valus = input("Для изменения статуса введите нормер задачи: ")
-        self._q.mark_done(valus)
-
     @staticmethod
-    def _function_selection():
-        print(f"Выберите что хотите сделать:\n1. Показать список задач\n2. Добавить задачу\n3. Удалить задачу\n4. Изменнить статус задачи\n5. Выход")
-        return input('Введи число: ')
-
-
+    def _show_menu():
+        print("Меню:")
+        print("1. Показать задачи")
+        print("2. Добавить задачу")
+        print("3. Удалить задачу")
+        print("4. Отметить задачу выполненной/невыполненной")
+        print("5. Выход")
 
 class TodoManager:
-    def __init__(self):
-        self._todo_list = self._load_from_file()
+    def __init__(self, path):
+        self.path = path
+        self.tasks = self.load_from_file()
 
     #Добавление задачи
     def add_task(self, title: str):
-        last_id = self._get_last_id()
-        self._todo_list[last_id] = {"title": title,
-        "status": "pending",
-        "created_at": datetime.now().strftime('%d.%m.%Y')}
-        print("Успешно добавлено")
+        new_id = self._get_next_id()
+        task = Task(id=new_id, title=title)
+        self.tasks.append(task)
+        self.save_to_file()
+        return "Задача добавлена."
 
     #Отметка выполнения задачи
     def mark_done(self, task_id: int):
-        todo = self._todo_list
-        if task_id in todo:
-            if todo[task_id]["status"] == "pending":
-                todo[task_id]["status"] = "done"
-            else:
-                todo[task_id]["status"] = "pending"
-            print(f"Задача №{task_id} изменила свой статус")
-        else:
-            print("Такой задачи нет")
+        for task in self.tasks:
+            if task.id == task_id:
+                task.toggle_status()
+                self.save_to_file()
+                return f"Статус задачи №{task_id} изменён"
+        return "Такой задачи нет"
 
     #Удаление задачи
     def delete_task(self, task_id: int):
-        if task_id in self._todo_list:
-            del self._todo_list[task_id]
-            print(f"Задача №{task_id} удалена")
-        else:
-            print("Такой задачи нет")
+        for task in self.tasks:
+            if task.id == task_id:
+                self.tasks.remove(task)
+                self.save_to_file()
+                return f"Задача №{task_id} удалена"
+        return "Такой задачи нет"
 
     #Показать задачи
     def show_tasks(self):
-        for key, value in self._todo_list.items():
-            stats = "✔️  " if value["status"] == "done" else "❌ "
-            print(f"{stats}№{key}. {value["title"]} {value["created_at"]}")
-        if self._todo_list == {}:
+        if not self.tasks:
             print("Нет задач")
+        for task in self.tasks:
+            status = "✔️  " if task.status == "done" else "❌ "
+            print(f"{status} №{task.id}. {task.title} ({task.created_at})")
+        
     
     #Сохранить в файл
     def save_to_file(self):
-        with open('todo/todo.json', 'w', encoding='utf-8') as f:
-            json.dump(self._todo_list, f, ensure_ascii=False, indent=4)
+        data = [task.to_dict() for task in self.tasks]
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        with open(self.path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
 
     #Загрузить из файла
-    @staticmethod
-    def _load_from_file():
+    def load_from_file(self):
         try:
-            with open('todo/todo.json', 'r', encoding='utf-8') as f:
-                date = json.load(f)
-        except FileNotFoundError:
-            print(1)
-            with open('todo/todo.json', "w", encoding='utf-8') as f:
-                date = {}
-        except:
-            date = {}
-        return date
+            with open(self.path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return [Task.from_dict(item) for item in data]
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
     
-    def _get_last_id(self):
-        if self._todo_list == {}:
-            return "0"
-        else:
-            [last] = deque(self._todo_list, maxlen=1)
-            return str(int(last)+1)
+    def _get_next_id(self):
+        if not self.tasks:
+            return 1
+        return max(task.id for task in self.tasks) + 1
 
-
-s = Task()
 
 if __name__ == '__main__':
-    s.start()
+    path = "todo/todo.json"
+    manager = TodoManager(path)
+    app = TodoCLI(manager)
+    app.run()
