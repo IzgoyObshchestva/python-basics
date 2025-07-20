@@ -1,1 +1,4 @@
 todo/todo.json
+venv/
+__pycache__/
+data.json
